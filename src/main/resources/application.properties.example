@@ -1,0 +1,24 @@
+spring.application.name=chitchat
+
+# Database Configuration
+spring.datasource.url=jdbc:postgresql://localhost:5432/chitchat
+spring.datasource.username=postgres
+spring.datasource.password=postgres
+spring.datasource.driver-class-name=org.postgresql.Driver
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+
+# Flyway Configuration
+spring.flyway.enabled=false
+
+# JWT Secret (HS256 min 256 bits Base64 / plain)
+spring.auth.jwt-secret=c2VjdXJlX2p3dF9zZWNyZXRfa2V5X2Zvcl9jaGl0Y2hhdF9hcHAxMjM0NTY3ODk=
+
+# At-Rest Encryption (AES-GCM 256-bit Base64 Key)
+app.encryption.secret-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
+
+# Key-Encryption-Key for wrapping User Ed25519 Private Keys at rest (AES-GCM 256-bit Base64 Key)
+app.encryption.key-encryption-key=Hy8P/2n7y9z5sW4G8oP+XmY8l9e8x7t3K9b6q1a0d4E=
+
+# Server port
+server.port=8080
