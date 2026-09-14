@@ -15,49 +15,51 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.text.ParseException;
 import java.util.Collections;
+import java.util.Set;
 
 @Component
 public class JWTAuthenticationFilter extends OncePerRequestFilter {
+    private static final Set<String> PUBLIC_ENDPOINTS = Set.of("/feed", "/message", "/health");
     private final JWTService jwtService;
 
-    public JWTAuthenticationFilter( JWTService jwtService ){
+    public JWTAuthenticationFilter(JWTService jwtService) {
         this.jwtService = jwtService;
     }
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return PUBLIC_ENDPOINTS.contains(request.getServletPath());
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain)
+            HttpServletResponse response,
+            FilterChain filterChain)
             throws ServletException, IOException {
         String authHeader = request.getHeader("Authorization");
 
-        if( authHeader==null || !authHeader.startsWith("Bearer ") ){
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
         String token = authHeader.substring(7);
-        try{
-            if(jwtService.validateAccessToken(token)){
+        try {
+            if (jwtService.validateAccessToken(token)) {
                 String username = jwtService.getUsernameFromToken(token);
-                UsernamePasswordAuthenticationToken authentication = new
-                        UsernamePasswordAuthenticationToken(username,null, Collections.emptyList());
+                UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(username,
+                        null, Collections.emptyList());
                 SecurityContextHolder.getContext().setAuthentication(authentication);
-            }
-            else{
+            } else {
                 SecurityContextHolder.clearContext();
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
-        }
-        catch(ParseException | JOSEException j ){
+        } catch (ParseException | JOSEException j) {
             SecurityContextHolder.clearContext();
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
         filterChain.doFilter(request, response);
     }
-
-
-
 
 }
