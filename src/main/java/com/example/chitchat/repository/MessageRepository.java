@@ -6,17 +6,21 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface MessageRepository extends JpaRepository<MessageEntity, UUID> {
-    @Query("""
-    SELECT m
-    FROM MessageEntity m
-    WHERE m.roomId = :roomId
-      AND m.isDeleted = false
-    ORDER BY m.createdTimestamp ASC
-    """)
-    List<MessageEntity> findRecentMessages(
-            @Param("roomId") UUID roomId
-    );
+  Optional<MessageEntity> findByMessageId(String messageId);
+
+  List<MessageEntity> findAllByOrderByCreatedTimestampAsc();
+
+  @Query("""
+      SELECT m
+      FROM MessageEntity m
+      WHERE m.roomId = :roomId
+        AND m.isDeleted = false
+      ORDER BY m.createdTimestamp ASC
+      """)
+  List<MessageEntity> findRecentMessages(
+      @Param("roomId") UUID roomId);
 }

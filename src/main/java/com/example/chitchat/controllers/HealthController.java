@@ -1,35 +1,25 @@
 package com.example.chitchat.controllers;
 
-import org.springframework.http.HttpStatus;
+import com.example.chitchat.config.RequestTrackingFilter;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/**
- * Liveness/readiness probe for external load balancers.
- * GET /health -> 200 {"status":"UP","database":"UP"} when the instance can
- * serve traffic (DB reachable), 503 otherwise.
- */
 @RestController
 public class HealthController {
 
-    private final JdbcTemplate jdbcTemplate;
+    private final RequestTrackingFilter requestTrackingFilter;
 
-    public HealthController(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public HealthController(RequestTrackingFilter requestTrackingFilter) {
+        this.requestTrackingFilter = requestTrackingFilter;
     }
 
     @GetMapping("/health")
-    public ResponseEntity<Map<String, String>> health() {
-        try {
-            jdbcTemplate.queryForObject("SELECT 1", Integer.class);
-            return ResponseEntity.ok(Map.of("status", "UP", "database", "UP"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                    .body(Map.of("status", "DOWN", "database", "DOWN"));
-        }
+    public ResponseEntity<Map<String, Object>> health() {
+        return ResponseEntity.ok(Map.of(
+                "status", "UP",
+                "active_connections", requestTrackingFilter.getActiveRequests()));
     }
 }

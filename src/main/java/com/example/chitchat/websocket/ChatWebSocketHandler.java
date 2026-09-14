@@ -26,10 +26,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final WsEventPublisher wsEventPublisher;
 
     public ChatWebSocketHandler(WebsocketSessionManager webSocketSessionManager,
-                                ObjectMapper objectMapper,
-                                MessageService messageService,
-                                RoomService roomService,
-                                WsEventPublisher wsEventPublisher){
+            ObjectMapper objectMapper,
+            MessageService messageService,
+            RoomService roomService,
+            WsEventPublisher wsEventPublisher) {
         this.webSocketSessionManager = webSocketSessionManager;
         this.objectMapper = objectMapper;
         this.messageService = messageService;
@@ -38,47 +38,45 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session){
+    public void afterConnectionEstablished(WebSocketSession session) {
         System.out.println("Connection received " + session.getId());
         System.out.println("Connected username " + session.getAttributes().get("username"));
     }
+
     @Override
     public void handleTextMessage(WebSocketSession session, TextMessage message) throws IOException {
         String username = (String) session.getAttributes().get("username");
 
         WebSocketBaseRequest req = objectMapper.readValue(message.getPayload(), WebSocketBaseRequest.class);
 
-        if("SEND_MESSAGE".equals(req.getType())){
+        if ("SEND_MESSAGE".equals(req.getType())) {
             ChatMessageRequest request = objectMapper.readValue(message.getPayload(), ChatMessageRequest.class);
 
-            MessageEntity savedMessage = messageService.saveMessage(request,username);
+            MessageEntity savedMessage = messageService.saveMessage(request, username);
 
             // Fan out via PostgreSQL NOTIFY; every instance (including this one)
             // hydrates the message from the shared DB and pushes to its local sockets.
-            wsEventPublisher.publishMessage(request.getRoomId(), savedMessage.getMessageId());
-        }
-        else if("MESSAGE_DELIVERED".equals(req.getType())){
-            MessageDeliveryStatus request = objectMapper.readValue(message.getPayload(),MessageDeliveryStatus.class);
-            messageService.updateMessageReceiptDeliveredStatus(request,username);
+            wsEventPublisher.publishMessage(request.getRoomId(), savedMessage.getId());
+        } else if ("MESSAGE_DELIVERED".equals(req.getType())) {
+            MessageDeliveryStatus request = objectMapper.readValue(message.getPayload(), MessageDeliveryStatus.class);
+            messageService.updateMessageReceiptDeliveredStatus(request, username);
             wsEventPublisher.publishStatus(request.getRoomId(), request.getMessageId(), username);
-        }
-        else if("MESSAGE_READ".equals(req.getType())){
-            MessageDeliveryStatus request = objectMapper.readValue(message.getPayload(),MessageDeliveryStatus.class);
-            messageService.updateMessageReceiptReadStatus(request,username);
+        } else if ("MESSAGE_READ".equals(req.getType())) {
+            MessageDeliveryStatus request = objectMapper.readValue(message.getPayload(), MessageDeliveryStatus.class);
+            messageService.updateMessageReceiptReadStatus(request, username);
             wsEventPublisher.publishStatus(request.getRoomId(), request.getMessageId(), username);
-        }
-        else if("JOIN_ROOM".equals(req.getType())){
+        } else if ("JOIN_ROOM".equals(req.getType())) {
             ChatMessageRequest request = objectMapper.readValue(message.getPayload(), ChatMessageRequest.class);
             UUID roomId = request.getRoomId();
-            if( !roomService.isUserMember(username,roomId) ) return;
-            webSocketSessionManager.joinRoom(request.getRoomId(),session);
+            if (!roomService.isUserMember(username, roomId))
+                return;
+            webSocketSessionManager.joinRoom(request.getRoomId(), session);
         }
 
-
     }
+
     @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status){
-        String username = (String) session.getAttributes().get("username");
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         webSocketSessionManager.removeSession(session);
         System.out.println("Connection closed " + session.getId());
     }
