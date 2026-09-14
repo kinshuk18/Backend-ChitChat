@@ -17,100 +17,115 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.UUID;
 
 @RestController
 public class Lab6Controller {
 
-    private static final UUID LAB_ROOM_ID = UUID.nameUUIDFromBytes(
-            "chitchat-lab6-room".getBytes(StandardCharsets.UTF_8));
+        private static final UUID LAB_ROOM_ID = UUID.nameUUIDFromBytes(
+                        "chitchat-lab6-room".getBytes(StandardCharsets.UTF_8));
 
-    private final MessageRepository messageRepository;
+        private final MessageRepository messageRepository;
 
-    public Lab6Controller(MessageRepository messageRepository) {
-        this.messageRepository = messageRepository;
-    }
-
-    @PostMapping("/message")
-    @Transactional
-    public ResponseEntity<Map<String, Object>> postMessage(
-            @RequestHeader(value = "X-Message-ID", required = false) String messageIdHeader,
-            @RequestBody(required = false) MessagePostRequest request) {
-        if (request == null || request.msg() == null || request.msg().isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Message payload is required."));
+        public Lab6Controller(MessageRepository messageRepository) {
+                this.messageRepository = messageRepository;
         }
 
-        String messageId = normalizeMessageId(messageIdHeader);
-        String clientName = (request.clientName() == null || request.clientName().isBlank()) ? "anonymous"
-                : request.clientName().trim();
-        String content = request.msg().trim();
+        @PostMapping("/message")
+        @Transactional
+        public ResponseEntity<Map<String, Object>> postMessage(
+                        @RequestHeader(value = "X-Message-ID", required = false) String messageIdHeader,
+                        @RequestBody(required = false) MessagePostRequest request) {
+                if (request == null || request.msg() == null || request.msg().isBlank()) {
+                        Map<String, Object> err = new HashMap<>();
+                        err.put("error", "Message payload is required.");
+                        return ResponseEntity.badRequest().body(err);
+                }
 
-        if (messageRepository.findByMessageId(messageId).isPresent()) {
-            return ResponseEntity.ok(Map.of(
-                    "messageId", messageId,
-                    "status", "duplicate",
-                    "saved", false,
-                    "content", content,
-                    "username", clientName));
+                String messageId = normalizeMessageId(messageIdHeader);
+                String clientName = (request.clientName() == null || request.clientName().isBlank()) ? "anonymous"
+                                : request.clientName().trim();
+                String content = request.msg().trim();
+
+                if (messageRepository.findByMessageId(messageId).isPresent()) {
+                        Map<String, Object> duplicate = new HashMap<>();
+                        duplicate.put("messageId", messageId);
+                        duplicate.put("status", "duplicate");
+                        duplicate.put("saved", false);
+                        duplicate.put("content", content);
+                        duplicate.put("username", clientName);
+                        return ResponseEntity.ok(duplicate);
+                }
+
+                MessageEntity message = new MessageEntity(
+                                messageId,
+                                LAB_ROOM_ID,
+                                clientName,
+                                content,
+                                "lab6-nonce",
+                                "lab6-signature",
+                                LocalDateTime.now(),
+                                null,
+                                false);
+                message.setContent(content);
+
+                try {
+                        MessageEntity saved = messageRepository.saveAndFlush(message);
+                        Map<String, Object> created = new HashMap<>();
+                        created.put("messageId", saved.getMessageId());
+                        created.put("status", "created");
+                        created.put("saved", true);
+                        created.put("content", saved.getContent());
+                        created.put("username", saved.getUsername());
+                        created.put("timestamp", saved.getCreatedTimestamp());
+                        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+                } catch (DataIntegrityViolationException conflict) {
+                        return messageRepository.findByMessageId(messageId)
+                                        .map(existing -> {
+                                                Map<String, Object> duplicate = new HashMap<>();
+                                                duplicate.put("messageId", existing.getMessageId());
+                                                duplicate.put("status", "duplicate");
+                                                duplicate.put("saved", false);
+                                                duplicate.put("content", existing.getContent());
+                                                duplicate.put("username", existing.getUsername());
+                                                return ResponseEntity.ok(duplicate);
+                                        })
+                                        .orElseGet(() -> {
+                                                Map<String, Object> err = new HashMap<>();
+                                                err.put("error", "Message could not be stored.");
+                                                return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
+                                        });
+                }
         }
 
-        MessageEntity message = new MessageEntity(
-                messageId,
-                LAB_ROOM_ID,
-                clientName,
-                content,
-                "lab6-nonce",
-                "lab6-signature",
-                LocalDateTime.now(),
-                null,
-                false);
-        message.setContent(content);
-
-        try {
-            MessageEntity saved = messageRepository.saveAndFlush(message);
-            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-                    "messageId", saved.getMessageId(),
-                    "status", "created",
-                    "saved", true,
-                    "content", saved.getContent(),
-                    "username", saved.getUsername(),
-                    "timestamp", saved.getCreatedTimestamp()));
-        } catch (DataIntegrityViolationException conflict) {
-            return messageRepository.findByMessageId(messageId)
-                    .map(existing -> ResponseEntity.ok(Map.of(
-                            "messageId", existing.getMessageId(),
-                            "status", "duplicate",
-                            "saved", false,
-                            "content", existing.getContent(),
-                            "username", existing.getUsername())))
-                    .orElseGet(() -> ResponseEntity.status(HttpStatus.CONFLICT)
-                            .body(Map.of("error", "Message could not be stored.")));
+        @GetMapping("/feed")
+        public ResponseEntity<List<Map<String, Object>>> feed() {
+                List<Map<String, Object>> payload = messageRepository.findAllByOrderByCreatedTimestampAsc()
+                                .stream()
+                                .map(message -> {
+                                        Map<String, Object> m = new HashMap<>();
+                                        m.put("messageId", message.getMessageId());
+                                        m.put("roomId", message.getRoomId().toString());
+                                        m.put("username", message.getUsername());
+                                        m.put("content", message.getContent() != null ? message.getContent()
+                                                        : message.getCiphertext());
+                                        m.put("timestamp", message.getCreatedTimestamp());
+                                        return m;
+                                })
+                                .toList();
+                return ResponseEntity.ok(payload);
         }
-    }
 
-    @GetMapping("/feed")
-    public ResponseEntity<List<Map<String, Object>>> feed() {
-        List<Map<String, Object>> payload = messageRepository.findAllByOrderByCreatedTimestampAsc()
-                .stream()
-                .map(message -> Map.of(
-                        "messageId", message.getMessageId(),
-                        "roomId", message.getRoomId().toString(),
-                        "username", message.getUsername(),
-                        "content", message.getContent() != null ? message.getContent() : message.getCiphertext(),
-                        "timestamp", message.getCreatedTimestamp()))
-                .toList();
-        return ResponseEntity.ok(payload);
-    }
-
-    private String normalizeMessageId(String messageIdHeader) {
-        if (messageIdHeader == null || messageIdHeader.isBlank()) {
-            return UUID.randomUUID().toString();
+        private String normalizeMessageId(String messageIdHeader) {
+                if (messageIdHeader == null || messageIdHeader.isBlank()) {
+                        return UUID.randomUUID().toString();
+                }
+                return messageIdHeader.trim();
         }
-        return messageIdHeader.trim();
-    }
 
-    public record MessagePostRequest(
-            @JsonProperty("client-name") String clientName,
-            @JsonProperty("msg") String msg) {
-    }
+        public record MessagePostRequest(
+                        @JsonProperty("client-name") String clientName,
+                        @JsonProperty("msg") String msg) {
+        }
 }
