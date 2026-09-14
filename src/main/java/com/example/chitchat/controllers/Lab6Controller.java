@@ -4,7 +4,9 @@ import com.example.chitchat.entity.MessageEntity;
 import com.example.chitchat.repository.MessageRepository;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -29,40 +32,74 @@ public class Lab6Controller {
     }
 
     @PostMapping("/message")
-    public ResponseEntity<MessageEntity> postMessage(
+    @Transactional
+    public ResponseEntity<Map<String, Object>> postMessage(
             @RequestHeader(value = "X-Message-ID", required = false) String messageIdHeader,
-            @RequestBody MessagePostRequest request) {
+            @RequestBody(required = false) MessagePostRequest request) {
+        if (request == null || request.msg() == null || request.msg().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Message payload is required."));
+        }
+
         String messageId = normalizeMessageId(messageIdHeader);
+        String clientName = (request.clientName() == null || request.clientName().isBlank()) ? "anonymous"
+                : request.clientName().trim();
+        String content = request.msg().trim();
+
+        if (messageRepository.findByMessageId(messageId).isPresent()) {
+            return ResponseEntity.ok(Map.of(
+                    "messageId", messageId,
+                    "status", "duplicate",
+                    "saved", false,
+                    "content", content,
+                    "username", clientName));
+        }
+
         MessageEntity message = new MessageEntity(
                 messageId,
                 LAB_ROOM_ID,
-                request.clientName(),
-                request.msg(),
+                clientName,
+                content,
                 "lab6-nonce",
                 "lab6-signature",
                 LocalDateTime.now(),
                 null,
                 false);
-        message.setContent(request.msg());
+        message.setContent(content);
 
         try {
-            return ResponseEntity.ok(messageRepository.saveAndFlush(message));
+            MessageEntity saved = messageRepository.saveAndFlush(message);
+            return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                    "messageId", saved.getMessageId(),
+                    "status", "created",
+                    "saved", true,
+                    "content", saved.getContent(),
+                    "username", saved.getUsername(),
+                    "timestamp", saved.getCreatedTimestamp()));
         } catch (DataIntegrityViolationException conflict) {
             return messageRepository.findByMessageId(messageId)
-                    .map(ResponseEntity::ok)
-                    .orElseGet(() -> ResponseEntity.ok(message));
+                    .map(existing -> ResponseEntity.ok(Map.of(
+                            "messageId", existing.getMessageId(),
+                            "status", "duplicate",
+                            "saved", false,
+                            "content", existing.getContent(),
+                            "username", existing.getUsername())))
+                    .orElseGet(() -> ResponseEntity.status(HttpStatus.CONFLICT)
+                            .body(Map.of("error", "Message could not be stored.")));
         }
     }
 
     @GetMapping("/feed")
-    public List<MessageEntity> feed() {
-        List<MessageEntity> messages = messageRepository.findAllByOrderByCreatedTimestampAsc();
-        for (MessageEntity message : messages) {
-            if (message.getContent() == null) {
-                message.setContent(message.getCiphertext());
-            }
-        }
-        return messages;
+    public ResponseEntity<List<Map<String, Object>>> feed() {
+        List<Map<String, Object>> payload = messageRepository.findAllByOrderByCreatedTimestampAsc()
+                .stream()
+                .map(message -> Map.of(
+                        "messageId", message.getMessageId(),
+                        "roomId", message.getRoomId().toString(),
+                        "username", message.getUsername(),
+                        "content", message.getContent() != null ? message.getContent() : message.getCiphertext(),
+                        "timestamp", message.getCreatedTimestamp()))
+                .toList();
+        return ResponseEntity.ok(payload);
     }
 
     private String normalizeMessageId(String messageIdHeader) {

@@ -8,7 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
@@ -28,7 +27,21 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return PUBLIC_ENDPOINTS.contains(request.getServletPath());
+        String servletPath = request.getServletPath();
+        String requestUri = request.getRequestURI();
+        return isPublicRoute(servletPath) || isPublicRoute(requestUri);
+    }
+
+    private boolean isPublicRoute(String path) {
+        if (path == null || path.isBlank()) {
+            return false;
+        }
+        for (String publicEndpoint : PUBLIC_ENDPOINTS) {
+            if (path.equals(publicEndpoint) || path.startsWith(publicEndpoint)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -54,12 +67,11 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 return;
             }
-        } catch (ParseException | JOSEException j) {
+        } catch (ParseException | JOSEException e) {
             SecurityContextHolder.clearContext();
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
             return;
         }
         filterChain.doFilter(request, response);
     }
-
 }
