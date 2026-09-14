@@ -28,20 +28,7 @@ public class JWTAuthenticationFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String servletPath = request.getServletPath();
-        String requestUri = request.getRequestURI();
-        return isPublicRoute(servletPath) || isPublicRoute(requestUri);
-    }
-
-    private boolean isPublicRoute(String path) {
-        if (path == null || path.isBlank()) {
-            return false;
-        }
-        for (String publicEndpoint : PUBLIC_ENDPOINTS) {
-            if (path.equals(publicEndpoint) || path.startsWith(publicEndpoint)) {
-                return true;
-            }
-        }
-        return false;
+        return servletPath != null && PUBLIC_ENDPOINTS.contains(servletPath);
     }
 
     @Override

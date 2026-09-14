@@ -15,9 +15,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 import java.util.UUID;
 
 @RestController
@@ -38,7 +38,7 @@ public class Lab6Controller {
                         @RequestHeader(value = "X-Message-ID", required = false) String messageIdHeader,
                         @RequestBody(required = false) MessagePostRequest request) {
                 if (request == null || request.msg() == null || request.msg().isBlank()) {
-                        Map<String, Object> err = new HashMap<>();
+                        Map<String, Object> err = new HashMap<String, Object>();
                         err.put("error", "Message payload is required.");
                         return ResponseEntity.badRequest().body(err);
                 }
@@ -49,7 +49,7 @@ public class Lab6Controller {
                 String content = request.msg().trim();
 
                 if (messageRepository.findByMessageId(messageId).isPresent()) {
-                        Map<String, Object> duplicate = new HashMap<>();
+                        Map<String, Object> duplicate = new HashMap<String, Object>();
                         duplicate.put("messageId", messageId);
                         duplicate.put("status", "duplicate");
                         duplicate.put("saved", false);
@@ -72,7 +72,7 @@ public class Lab6Controller {
 
                 try {
                         MessageEntity saved = messageRepository.saveAndFlush(message);
-                        Map<String, Object> created = new HashMap<>();
+                        Map<String, Object> created = new HashMap<String, Object>();
                         created.put("messageId", saved.getMessageId());
                         created.put("status", "created");
                         created.put("saved", true);
@@ -83,7 +83,7 @@ public class Lab6Controller {
                 } catch (DataIntegrityViolationException conflict) {
                         return messageRepository.findByMessageId(messageId)
                                         .map(existing -> {
-                                                Map<String, Object> duplicate = new HashMap<>();
+                                                Map<String, Object> duplicate = new HashMap<String, Object>();
                                                 duplicate.put("messageId", existing.getMessageId());
                                                 duplicate.put("status", "duplicate");
                                                 duplicate.put("saved", false);
@@ -92,7 +92,7 @@ public class Lab6Controller {
                                                 return ResponseEntity.ok(duplicate);
                                         })
                                         .orElseGet(() -> {
-                                                Map<String, Object> err = new HashMap<>();
+                                                Map<String, Object> err = new HashMap<String, Object>();
                                                 err.put("error", "Message could not be stored.");
                                                 return ResponseEntity.status(HttpStatus.CONFLICT).body(err);
                                         });
@@ -104,7 +104,7 @@ public class Lab6Controller {
                 List<Map<String, Object>> payload = messageRepository.findAllByOrderByCreatedTimestampAsc()
                                 .stream()
                                 .map(message -> {
-                                        Map<String, Object> m = new HashMap<>();
+                                        Map<String, Object> m = new HashMap<String, Object>();
                                         m.put("messageId", message.getMessageId());
                                         m.put("roomId", message.getRoomId().toString());
                                         m.put("username", message.getUsername());
